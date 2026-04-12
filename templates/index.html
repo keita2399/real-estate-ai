@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>不動産書類AI自動入力</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Hiragino Sans", "Meiryo", sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      min-height: 100vh;
+    }
+
+    /* ヘッダー */
+    header {
+      background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+      color: #fff;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header .icon { font-size: 32px; }
+    header h1 { font-size: 22px; font-weight: 700; letter-spacing: 0.05em; }
+    header p  { font-size: 13px; opacity: 0.8; margin-top: 2px; }
+
+    /* メインレイアウト */
+    main {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* カード */
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      padding: 28px 32px;
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a365d;
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #ebf4ff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ドロップゾーン */
+    #drop-zone {
+      border: 2px dashed #90cdf4;
+      border-radius: 10px;
+      background: #ebf8ff;
+      padding: 48px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    #drop-zone:hover, #drop-zone.drag-over {
+      border-color: #3182ce;
+      background: #bee3f8;
+    }
+    #drop-zone .drop-icon { font-size: 48px; margin-bottom: 12px; }
+    #drop-zone .drop-main { font-size: 16px; font-weight: 600; color: #2b6cb0; }
+    #drop-zone .drop-sub  { font-size: 13px; color: #718096; margin-top: 6px; }
+    #file-input { display: none; }
+
+    /* ファイルリスト */
+    #file-list {
+      margin-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: #f7fafc;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      font-size: 13px;
+    }
+    .file-item .file-icon { font-size: 20px; }
+    .file-item .file-name { flex: 1; font-weight: 500; }
+    .file-item .file-size { color: #a0aec0; font-size: 12px; }
+    .file-item .remove-btn {
+      background: none;
+      border: none;
+      color: #fc8181;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .file-item .remove-btn:hover { background: #fff5f5; }
+
+    /* 実行ボタン */
+    #run-btn {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #2b6cb0 0%, #1a365d 100%);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      letter-spacing: 0.05em;
+    }
+    #run-btn:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    #run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* プログレス */
+    #progress-area { display: none; }
+    .progress-bar-wrap {
+      background: #e2e8f0;
+      border-radius: 99px;
+      height: 8px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3182ce, #63b3ed);
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.4s ease;
+      animation: shimmer 1.5s infinite;
+      background-size: 200% 100%;
+    }
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+    #progress-message { font-size: 14px; color: #4a5568; text-align: center; }
+
+    /* 結果 */
+    #result-area { display: none; }
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f0fff4;
+      border: 1px solid #9ae6b4;
+      color: #276749;
+      padding: 8px 16px;
+      border-radius: 99px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    #download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #38a169;
+      color: #fff;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: opacity 0.2s;
+    }
+    #download-btn:hover { opacity: 0.85; }
+
+    /* 抽出結果テーブル */
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: #2b6cb0;
+      padding: 5px 12px;
+      border-radius: 4px 4px 0 0;
+      display: inline-block;
+      margin-top: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+    th, td {
+      padding: 8px 12px;
+      text-align: left;
+      border: 1px solid #e2e8f0;
+    }
+    th {
+      background: #ebf4ff;
+      color: #2b6cb0;
+      font-weight: 600;
+      width: 30%;
+    }
+    tr:nth-child(even) td { background: #f7fafc; }
+    td.empty { color: #a0aec0; font-style: italic; }
+    td.filled { color: #276749; font-weight: 500; }
+
+    /* エラー */
+    #error-area {
+      display: none;
+      background: #fff5f5;
+      border: 1px solid #fc8181;
+      border-radius: 8px;
+      padding: 16px 20px;
+      color: #c53030;
+      font-size: 14px;
+    }
+
+    /* 会社情報フォーム */
+    .company-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 20px;
+      margin-top: 4px;
+    }
+    .company-grid .full { grid-column: 1 / -1; }
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      color: #2b6cb0;
+      margin-bottom: 4px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #bee3f8;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      background: #f7fbff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: #3182ce;
+      box-shadow: 0 0 0 3px rgba(49,130,206,0.15);
+      background: #fff;
+    }
+    .saved-badge {
+      display: none;
+      font-size: 11px;
+      color: #38a169;
+      margin-left: 8px;
+    }
+    .saved-badge.show { display: inline; }
+
+    /* フッター */
+    footer {
+      text-align: center;
+      padding: 32px;
+      font-size: 12px;
+      color: #a0aec0;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="icon">🏠</div>
+  <div>
+    <h1>不動産書類 AI 自動入力システム</h1>
+    <p>登記簿謄本・ハザードマップ等のPDFから重要事項説明書Excelを自動生成</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- 会社情報カード -->
+  <div class="card">
+    <div class="card-title">
+      🏢 宅建業者・宅建士情報
+      <span class="saved-badge" id="saved-badge">✓ 保存済み</span>
+    </div>
+    <div class="company-grid">
+      <div class="form-group full">
+        <label>商号・名称</label>
+        <input type="text" id="c-name" placeholder="例：株式会社〇〇不動産">
+      </div>
+      <div class="form-group">
+        <label>免許証番号</label>
+        <input type="text" id="c-license" placeholder="例：国土交通大臣(3)第〇〇号">
+      </div>
+      <div class="form-group">
+        <label>電話番号</label>
+        <input type="text" id="c-tel" placeholder="例：03-0000-0000">
+      </div>
+      <div class="form-group full">
+        <label>所在地</label>
+        <input type="text" id="c-address" placeholder="例：東京都千代田区〇〇一丁目1番1号">
+      </div>
+      <div class="form-group">
+        <label>宅建士氏名</label>
+        <input type="text" id="c-agent" placeholder="例：山田 太郎">
+      </div>
+      <div class="form-group">
+        <label>登録番号</label>
+        <input type="text" id="c-reg" placeholder="例：東京都知事登録(〇)第〇〇号">
+      </div>
+    </div>
+  </div>
+
+  <!-- アップロードカード -->
+  <div class="card">
+    <div class="card-title">📄 PDFをアップロード</div>
+
+    <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <div class="drop-icon">📂</div>
+      <div class="drop-main">ここにPDFをドラッグ＆ドロップ</div>
+      <div class="drop-sub">またはクリックしてファイルを選択（複数可）</div>
+    </div>
+    <input type="file" id="file-input" accept=".pdf" multiple>
+
+    <div id="file-list"></div>
+  </div>
+
+  <!-- 実行ボタン -->
+  <button id="run-btn" disabled onclick="runProcess()">
+    AI解析 → Excel自動入力を実行
+  </button>
+
+  <!-- プログレス -->
+  <div class="card" id="progress-area">
+    <div class="card-title">⏳ 処理中</div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div id="progress-message">PDFをアップロード中...</div>
+  </div>
+
+  <!-- エラー -->
+  <div id="error-area"></div>
+
+  <!-- 結果 -->
+  <div class="card" id="result-area">
+    <div class="card-title">✅ 完了</div>
+    <div class="result-header">
+      <div class="result-badge">
+        <span>🤖</span>
+        <span id="filled-count-label">-- 項目を自動入力しました</span>
+      </div>
+      <a id="download-btn" href="#" download>
+        ⬇ Excelをダウンロード
+      </a>
+    </div>
+    <div id="extracted-preview"></div>
+  </div>
+
+</main>
+
+<footer>Powered by Gemini 2.5 Flash &amp; Claude Code &nbsp;|&nbsp; 宅建士による最終確認を必ず行ってください</footer>
+
+<script>
+  // ---- 会社情報 localStorage ----
+  const COMPANY_FIELDS = [
+    { id: 'c-name',    key: '商号名称' },
+    { id: 'c-license', key: '免許証番号' },
+    { id: 'c-tel',     key: '電話番号' },
+    { id: 'c-address', key: '所在地' },
+    { id: 'c-agent',   key: '宅建士氏名' },
+    { id: 'c-reg',     key: '登録番号' },
+  ];
+  const STORAGE_KEY = 'realestate_company_info';
+
+  function loadCompanyInfo() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+      COMPANY_FIELDS.forEach(f => {
+        const el = document.getElementById(f.id);
+        if (el && saved[f.key]) el.value = saved[f.key];
+      });
+      if (Object.keys(saved).length > 0) {
+        document.getElementById('saved-badge').classList.add('show');
+      }
+    } catch(e) {}
+  }
+
+  function saveCompanyInfo() {
+    const data = {};
+    COMPANY_FIELDS.forEach(f => {
+      const val = document.getElementById(f.id)?.value.trim();
+      if (val) data[f.key] = val;
+    });
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    const badge = document.getElementById('saved-badge');
+    badge.classList.add('show');
+    badge.textContent = '✓ 保存しました';
+    setTimeout(() => { badge.textContent = '✓ 保存済み'; }, 1500);
+  }
+
+  function getCompanyInfo() {
+    const data = {};
+    COMPANY_FIELDS.forEach(f => {
+      const val = document.getElementById(f.id)?.value.trim();
+      if (val) data[f.key] = val;
+    });
+    return data;
+  }
+
+  // 入力するたびに自動保存
+  document.addEventListener('DOMContentLoaded', () => {
+    loadCompanyInfo();
+    COMPANY_FIELDS.forEach(f => {
+      document.getElementById(f.id)?.addEventListener('change', saveCompanyInfo);
+    });
+  });
+
+  // ---- ファイル管理 ----
+  let selectedFiles = [];
+
+  const dropZone   = document.getElementById('drop-zone');
+  const fileInput  = document.getElementById('file-input');
+  const fileList   = document.getElementById('file-list');
+  const runBtn     = document.getElementById('run-btn');
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    addFiles([...e.dataTransfer.files]);
+  });
+  fileInput.addEventListener('change', () => addFiles([...fileInput.files]));
+
+  function addFiles(files) {
+    files.forEach(f => {
+      if (f.type === 'application/pdf' && !selectedFiles.find(x => x.name === f.name)) {
+        selectedFiles.push(f);
+      }
+    });
+    renderFileList();
+    fileInput.value = '';
+  }
+
+  function removeFile(name) {
+    selectedFiles = selectedFiles.filter(f => f.name !== name);
+    renderFileList();
+  }
+
+  function renderFileList() {
+    fileList.innerHTML = selectedFiles.map(f => `
+      <div class="file-item">
+        <span class="file-icon">📄</span>
+        <span class="file-name">${f.name}</span>
+        <span class="file-size">${(f.size / 1024).toFixed(0)} KB</span>
+        <button class="remove-btn" onclick="removeFile('${f.name}')" title="削除">✕</button>
+      </div>
+    `).join('');
+    runBtn.disabled = selectedFiles.length === 0;
+  }
+
+  // ---- 処理実行 ----
+  async function runProcess() {
+    if (selectedFiles.length === 0) return;
+
+    const progressArea  = document.getElementById('progress-area');
+    const progressBar   = document.getElementById('progress-bar');
+    const progressMsg   = document.getElementById('progress-message');
+    const resultArea    = document.getElementById('result-area');
+    const errorArea     = document.getElementById('error-area');
+
+    progressArea.style.display = 'block';
+    resultArea.style.display   = 'none';
+    errorArea.style.display    = 'none';
+    runBtn.disabled = true;
+
+    // プログレスアニメーション
+    const steps = [
+      { pct: 15, msg: 'PDFをサーバーにアップロード中...' },
+      { pct: 35, msg: 'Gemini Files API にPDFを送信中...' },
+      { pct: 60, msg: 'Gemini 2.5 Flash が書類を解析中...' },
+      { pct: 85, msg: 'Excelテンプレートに情報を書き込み中...' },
+      { pct: 95, msg: 'ファイルを生成中...' },
+    ];
+    let stepIdx = 0;
+    const timer = setInterval(() => {
+      if (stepIdx < steps.length) {
+        const s = steps[stepIdx++];
+        progressBar.style.width = s.pct + '%';
+        progressMsg.textContent = s.msg;
+      }
+    }, 2500);
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach(f => formData.append('files', f));
+      formData.append('company_info', JSON.stringify(getCompanyInfo()));
+
+      const res  = await fetch('/api/process', { method: 'POST', body: formData });
+      const data = await res.json();
+      clearInterval(timer);
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || '不明なエラーが発生しました');
+      }
+
+      progressBar.style.width = '100%';
+      progressMsg.textContent = '完了！';
+      setTimeout(() => { progressArea.style.display = 'none'; }, 800);
+
+      // 結果表示
+      document.getElementById('filled-count-label').textContent =
+        `${data.filled_count} / ${data.total_count} 項目を自動入力しました`;
+      document.getElementById('download-btn').href = `/api/download/${data.filename}`;
+      document.getElementById('download-btn').setAttribute('download', data.filename);
+
+      renderExtracted(data.extracted);
+      resultArea.style.display = 'block';
+      resultArea.scrollIntoView({ behavior: 'smooth' });
+
+    } catch (err) {
+      clearInterval(timer);
+      progressArea.style.display = 'none';
+      errorArea.style.display = 'block';
+      errorArea.textContent = '❌ エラー: ' + err.message;
+    } finally {
+      runBtn.disabled = false;
+    }
+  }
+
+  // ---- 抽出結果を表として表示 ----
+  function renderExtracted(data) {
+    const sections = [
+      { label: '物件情報（土地）',   keys: ['所在','地番','地目','地積'] },
+      { label: '物件情報（建物）',   keys: ['建物所在','家屋番号','種類','構造','床面積','建築年月'] },
+      { label: '所有権',             keys: ['所有者氏名','所有者住所','取得原因','取得日','共有持分'] },
+      { label: '抵当権等',           keys: ['抵当権有無','債権額','債権者','債務者','設定日'] },
+      { label: '都市計画',           keys: ['用途地域','建ぺい率','容積率','防火地域','高度地区'] },
+      { label: 'インフラ',           keys: ['上水道','下水道','ガス','電気'] },
+      { label: 'ハザードマップ',     keys: ['洪水浸水想定区域','土砂災害警戒区域','津波災害警戒区域','液状化リスク','避難場所'] },
+    ];
+
+    const EMPTY = ['不明','記載なし','なし',''];
+
+    let filledRows = 0, totalRows = 0;
+    let html = '';
+    sections.forEach(sec => {
+      html += `<div class="section-label">${sec.label}</div>`;
+      html += '<table><tbody>';
+      sec.keys.forEach(k => {
+        const v   = data[k] || '';
+        const isEmpty = EMPTY.includes(v);
+        totalRows++;
+        if (!isEmpty) filledRows++;
+        const cls  = isEmpty ? 'empty' : 'filled';
+        const icon = isEmpty ? '' : '✓ ';
+        const disp = isEmpty ? '対象書類に記載なし' : v;
+        html += `<tr><th>${k}</th><td class="${cls}">${icon}${disp}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    });
+    document.getElementById('extracted-preview').innerHTML = html;
+  }
+</script>
+</body>
+</html>
